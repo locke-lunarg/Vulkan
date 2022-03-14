@@ -7,6 +7,8 @@
 */
 
 #include "vulkanexamplebase.h"
+#include <thread>
+#include <future>
 
 // Holds data for a ray tracing scratch buffer that is used as a temporary storage
 struct RayTracingScratchBuffer
@@ -37,6 +39,12 @@ public:
 	PFN_vkCmdTraceRaysKHR vkCmdTraceRaysKHR;
 	PFN_vkGetRayTracingShaderGroupHandlesKHR vkGetRayTracingShaderGroupHandlesKHR;
 	PFN_vkCreateRayTracingPipelinesKHR vkCreateRayTracingPipelinesKHR;
+
+	PFN_vkCreateDeferredOperationKHR vkCreateDeferredOperationKHR;
+	PFN_vkGetDeferredOperationMaxConcurrencyKHR vkGetDeferredOperationMaxConcurrencyKHR;
+	PFN_vkDeferredOperationJoinKHR vkDeferredOperationJoinKHR;
+	PFN_vkGetDeferredOperationResultKHR vkGetDeferredOperationResultKHR;
+	PFN_vkDestroyDeferredOperationKHR vkDestroyDeferredOperationKHR;
 
 	VkPhysicalDeviceRayTracingPipelinePropertiesKHR  rayTracingPipelineProperties{};
 	VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureFeatures{};
@@ -670,6 +678,10 @@ public:
 		/*
 			Create the ray tracing pipeline
 		*/
+		VkDeferredOperationKHR deferred_operation;
+		VkResult               result = vkCreateDeferredOperationKHR(device, nullptr, &deferred_operation);
+		assert(result == VK_SUCCESS);
+
 		VkRayTracingPipelineCreateInfoKHR rayTracingPipelineCI{};
 		rayTracingPipelineCI.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
 		rayTracingPipelineCI.stageCount = static_cast<uint32_t>(shaderStages.size());
@@ -678,7 +690,50 @@ public:
 		rayTracingPipelineCI.pGroups = shaderGroups.data();
 		rayTracingPipelineCI.maxPipelineRayRecursionDepth = 1;
 		rayTracingPipelineCI.layout = pipelineLayout;
-		VK_CHECK_RESULT(vkCreateRayTracingPipelinesKHR(device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &rayTracingPipelineCI, nullptr, &pipeline));
+		vkCreateRayTracingPipelinesKHR(device, deferred_operation, VK_NULL_HANDLE, 1, &rayTracingPipelineCI, nullptr, &pipeline);
+
+		/*uint32_t max_threads = std::thread::hardware_concurrency();
+		uint32_t thread_count = std::min(vkGetDeferredOperationMaxConcurrencyKHR(device, deferred_operation), max_threads);
+		bool                           deferred_operation_completed = false;
+		std::vector<std::future<void>> deferred_operation_joins;
+
+		VkDevice                                    device1 = device;
+		PFN_vkDeferredOperationJoinKHR vkDeferredOperationJoinKHR1 = vkDeferredOperationJoinKHR;
+		for (uint32_t i = 0; i < thread_count; i++)
+		{
+			// At least one vkDeferredOperationJoinKHR in a thread has to get VK_SUCCESS.
+			deferred_operation_joins.emplace_back(std::async(
+				std::launch::async,
+				[vkDeferredOperationJoinKHR1, device1, deferred_operation, &deferred_operation_completed]() {
+					VkResult result = VK_ERROR_UNKNOWN;
+					while (result != VK_SUCCESS && !deferred_operation_completed)
+					{
+						result = vkDeferredOperationJoinKHR1(device1, deferred_operation);
+						assert(result == VK_SUCCESS || result == VK_THREAD_DONE_KHR || result == VK_THREAD_IDLE_KHR);
+						if (result == VK_SUCCESS)
+						{
+							deferred_operation_completed = true;
+						}
+					}
+				}));
+		}
+
+		for (auto& j : deferred_operation_joins)
+		{
+			j.get();
+		}
+
+		result = VK_NOT_READY;
+		while (result != VK_SUCCESS)
+		{
+			result = vkGetDeferredOperationResultKHR(device, deferred_operation);
+			assert(result == VK_SUCCESS || result == VK_NOT_READY);
+		}*/
+		result = vkDeferredOperationJoinKHR(device, deferred_operation);
+		assert(result == VK_SUCCESS || result == VK_THREAD_DONE_KHR || result == VK_THREAD_IDLE_KHR);
+		result = vkGetDeferredOperationResultKHR(device, deferred_operation);
+		assert(result == VK_SUCCESS);
+		vkDestroyDeferredOperationKHR(device, deferred_operation, nullptr);
 	}
 
 	/*
@@ -872,6 +927,12 @@ public:
 		vkCmdTraceRaysKHR = reinterpret_cast<PFN_vkCmdTraceRaysKHR>(vkGetDeviceProcAddr(device, "vkCmdTraceRaysKHR"));
 		vkGetRayTracingShaderGroupHandlesKHR = reinterpret_cast<PFN_vkGetRayTracingShaderGroupHandlesKHR>(vkGetDeviceProcAddr(device, "vkGetRayTracingShaderGroupHandlesKHR"));
 		vkCreateRayTracingPipelinesKHR = reinterpret_cast<PFN_vkCreateRayTracingPipelinesKHR>(vkGetDeviceProcAddr(device, "vkCreateRayTracingPipelinesKHR"));
+
+		vkCreateDeferredOperationKHR = reinterpret_cast<PFN_vkCreateDeferredOperationKHR>(vkGetDeviceProcAddr(device, "vkCreateDeferredOperationKHR"));
+		vkGetDeferredOperationMaxConcurrencyKHR = reinterpret_cast<PFN_vkGetDeferredOperationMaxConcurrencyKHR>(vkGetDeviceProcAddr(device, "vkGetDeferredOperationMaxConcurrencyKHR"));
+		vkDeferredOperationJoinKHR = reinterpret_cast<PFN_vkDeferredOperationJoinKHR>(vkGetDeviceProcAddr(device, "vkDeferredOperationJoinKHR"));
+		vkGetDeferredOperationResultKHR = reinterpret_cast<PFN_vkGetDeferredOperationResultKHR>(vkGetDeviceProcAddr(device, "vkGetDeferredOperationResultKHR"));
+		vkDestroyDeferredOperationKHR = reinterpret_cast<PFN_vkDestroyDeferredOperationKHR>(vkGetDeviceProcAddr(device, "vkDestroyDeferredOperationKHR"));
 
 		// Create the acceleration structures used to render the ray traced scene
 		createBottomLevelAccelerationStructure();

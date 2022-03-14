@@ -122,6 +122,14 @@ VkResult VulkanExampleBase::createInstance(bool enableValidation)
 			std::cerr << "Validation layer VK_LAYER_KHRONOS_validation not present, validation is disabled";
 		}
 	}
+
+	VkValidationFeatureDisableEXT disable = VK_VALIDATION_FEATURE_DISABLE_UNIQUE_HANDLES_EXT;
+	VkValidationFeaturesEXT       v_feature{};
+	v_feature.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
+	v_feature.disabledValidationFeatureCount = 1;
+	v_feature.pDisabledValidationFeatures = &disable;
+	instanceCreateInfo.pNext = &v_feature;  //info.instanceCreateInfoExt;
+
 	return vkCreateInstance(&instanceCreateInfo, nullptr, &instance);
 }
 
