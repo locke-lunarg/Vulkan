@@ -85,7 +85,7 @@ public:
 		camera.setTranslation(glm::vec3(0.0f, 0.0f, -2.5f));
 
 		// Require Vulkan 1.1
-		apiVersion = VK_API_VERSION_1_1;
+		apiVersion = VK_API_VERSION_1_3;
 
 		// Ray tracing related extensions required by this sample
 		enabledDeviceExtensions.push_back(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
@@ -191,6 +191,11 @@ public:
 		memoryAllocateInfo.memoryTypeIndex = vulkanDevice->getMemoryType(memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 		VK_CHECK_RESULT(vkAllocateMemory(device, &memoryAllocateInfo, nullptr, &accelerationStructure.memory));
 		VK_CHECK_RESULT(vkBindBufferMemory(device, accelerationStructure.buffer, accelerationStructure.memory, 0));
+
+		VkDeviceMemoryOpaqueCaptureAddressInfo info{ VK_STRUCTURE_TYPE_DEVICE_MEMORY_OPAQUE_CAPTURE_ADDRESS_INFO,
+													 nullptr,
+													 accelerationStructure.memory };
+		vkGetDeviceMemoryOpaqueCaptureAddress(device, &info);
 	}
 
 
