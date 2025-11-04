@@ -38,6 +38,9 @@ public:
 	PFN_vkGetRayTracingShaderGroupHandlesKHR vkGetRayTracingShaderGroupHandlesKHR{ nullptr };
 	PFN_vkCreateRayTracingPipelinesKHR vkCreateRayTracingPipelinesKHR{ nullptr };
 
+	PFN_vkCreateDeferredOperationKHR vkCreateDeferredOperationKHR{ nullptr };
+	PFN_vkDeferredOperationJoinKHR vkDeferredOperationJoinKHR{ nullptr };
+
 	VkPhysicalDeviceRayTracingPipelinePropertiesKHR  rayTracingPipelineProperties{};
 	VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureFeatures{};
 
@@ -676,6 +679,9 @@ public:
 			shaderGroups.push_back(shaderGroup);
 		}
 
+		VkDeferredOperationKHR operation = VK_NULL_HANDLE;
+		auto result = vkCreateDeferredOperationKHR(device, nullptr, &operation);
+
 		/*
 			Create the ray tracing pipeline
 		*/
@@ -687,7 +693,12 @@ public:
 		rayTracingPipelineCI.pGroups = shaderGroups.data();
 		rayTracingPipelineCI.maxPipelineRayRecursionDepth = 1;
 		rayTracingPipelineCI.layout = pipelineLayout;
-		VK_CHECK_RESULT(vkCreateRayTracingPipelinesKHR(device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &rayTracingPipelineCI, nullptr, &pipeline));
+		result = vkCreateRayTracingPipelinesKHR(device, operation, VK_NULL_HANDLE, 1, &rayTracingPipelineCI, nullptr, &pipeline);
+
+		// result == VK_OPERATION_DEFERRED_KHR
+		while (result != VK_SUCCESS) {
+			result = vkDeferredOperationJoinKHR(device, operation);
+		}
 	}
 
 	/*
@@ -777,6 +788,10 @@ public:
 		vkCmdTraceRaysKHR = reinterpret_cast<PFN_vkCmdTraceRaysKHR>(vkGetDeviceProcAddr(device, "vkCmdTraceRaysKHR"));
 		vkGetRayTracingShaderGroupHandlesKHR = reinterpret_cast<PFN_vkGetRayTracingShaderGroupHandlesKHR>(vkGetDeviceProcAddr(device, "vkGetRayTracingShaderGroupHandlesKHR"));
 		vkCreateRayTracingPipelinesKHR = reinterpret_cast<PFN_vkCreateRayTracingPipelinesKHR>(vkGetDeviceProcAddr(device, "vkCreateRayTracingPipelinesKHR"));
+
+		vkCreateDeferredOperationKHR = reinterpret_cast<PFN_vkCreateDeferredOperationKHR>(vkGetDeviceProcAddr(device, "vkCreateDeferredOperationKHR"));
+		vkDeferredOperationJoinKHR = reinterpret_cast<PFN_vkDeferredOperationJoinKHR>(vkGetDeviceProcAddr(device, "vkDeferredOperationJoinKHR"));
+
 
 		// Create the acceleration structures used to render the ray traced scene
 		createBottomLevelAccelerationStructure();
